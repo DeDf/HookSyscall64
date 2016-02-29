@@ -4,7 +4,7 @@
 
 typedef struct _SERVICE_DESCRIPTOR_TABLE {
 
-	PLONG   ServiceTable;
+	PLONG32 ServiceTable;
 	PULONG  CounterTable;
 	ULONG   TableSize;
 	PUCHAR  ArgumentTable;
@@ -12,12 +12,12 @@ typedef struct _SERVICE_DESCRIPTOR_TABLE {
 } SERVICE_DESCRIPTOR_TABLE, *PSERVICE_DESCRIPTOR_TABLE;
 
 typedef struct _SERVICE_DESCRIPTOR_TABLE_SHADOW {
-	PLONG   SsdtServiceTable;
+	PLONG32 SsdtServiceTable;
 	PULONG  SsdtCounterTable;
 	ULONG	SsdtTableSize;
 	PUCHAR  SsdtArgumentTable;
 
-	PLONG   ServiceTable;
+	PLONG32 ServiceTable;
 	PULONG  CounterTable;
 	ULONG	TableSize;
 	PUCHAR  ArgumentTable;
