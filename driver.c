@@ -1,8 +1,8 @@
 
 #include "driver.h"
 
-ULONG_PTR CallR10InDriver, CallR10InMdl, CallR10InSystem;
-PULONG_PTR CallR10;
+ULONG64 g_KiSystemCall64;
+ULONG64 g_MyKiSysCall64;
 
 PUCHAR Trampoline;
 PULONG_PTR Address;
@@ -34,9 +34,9 @@ VOID FixOpcodeCmpRsiInDriver(
 	*(PULONG_PTR)(Trampoline + 1) = 0x058B48;
 
 	// rel32
-	*pAddress = (ULONG_PTR)MmUserProbeAddress;
+	*pAddress = (ULONG_PTR)&MmUserProbeAddress;
 	Rel32 = (LONG32)((PUCHAR)pAddress - Trampoline - 8);
-	*(PULONG32)(Trampoline + 4) = Rel32;
+	*(PLONG32)(Trampoline + 4) = Rel32;
 
 	// cmp rsi,qword ptr [rax]
 	*(PULONG_PTR)(Trampoline + 8) = 0x303B48;
@@ -55,98 +55,86 @@ VOID FixOpcodeCmpRsiInDriver(
 	Trampoline += 13;
 }
  
-// VOID FixOpcodeCmovaeRsiInDriver(ULONG_PTR AddressInDriver,
-// 	ULONG_PTR AddressInSystem,
-// 	ULONG_PTR AddressInMdl,
-// 	ULONG64 Offset,
-// 	PULONG_PTR Ptr)
-// {
-// 	ULONG_PTR MdlOffset = AddressInMdl + Offset;
-//     ULONG32 Rel32;
-//     ULONG_PTR DriverOffset;
-// 
-// 	DbgPrint("From %p found cmovae rsi,qword ptr [nt!MmUserProbeAddress]\n", MdlOffset);
-// 
-// 	// push rax
-// 	*(PULONG_PTR)Trampolines = 0x50;
-// 	//mov rax, qword ptr
-// 	*(PULONG_PTR)(Trampolines + 1) = 0x058B48;
-// 
-// 	// rel32
-// 	*(PULONG_PTR)*Ptr = (ULONG64)&MmUserProbeAddress;
-// 	Rel32 = (ULONG32)(*Ptr - (TrampolineInDriver + 8));
-// 	*(PULONG32)(Trampolines + 4) = Rel32;
-// 
-// 	// cmovae  rsi,qword ptr [rax]
-// 	*(PULONG_PTR)(Trampolines + 8) = 0x30430F48;
-// 	// pop rax
-// 	*(PUCHAR)(Trampolines + 12) = 0x58;
-// 	// ret
-// 	*(PUCHAR)(Trampolines + 13) = 0xC3;
-// 
-// 	// call
-// 	*(PUCHAR)MdlOffset = 0xE8;
-// 
-// 	DriverOffset = AddressInDriver + Offset;
-// 	Rel32 = (ULONG32)(TrampolineInDriver - (DriverOffset + 5));
-// 
-// 	RtlCopyMemory((PULONG_PTR)(MdlOffset + 1), &Rel32, 4);
-// 
-// 	// nop 3 bytes
-// 	memset((PULONG_PTR)(MdlOffset + 5), 0x90, 3);
-// 
-// 	TrampolineInDriver += 14;
-// 	Trampolines += 14;
-// 	*Ptr += 8;
-// }
-// 
-// VOID FixOpcodeTestInDriver(ULONG_PTR AddressInDriver,
-// 	ULONG_PTR AddressInSystem,
-// 	ULONG_PTR AddressInMdl,
-// 	ULONG64 Offset,
-// 	PULONG_PTR Ptr)
-// {
-// 	ULONG_PTR MdlOffset = AddressInMdl + Offset;
-//     ULONG32 Rel32;
-//     ULONG_PTR DriverOffset;
-// 
-// 	DbgPrint("From %p found test dword ptr [nt!PerfGlobalGroupMask],40h\n", MdlOffset);
-// 
-// 	Rel32 = *(PULONG32)(MdlOffset + 2);
-// 
-// 	// push rax
-// 	*(PULONG_PTR)Trampolines = 0x50;
-// 	// mov rax, qword ptr
-// 	*(PULONG_PTR)(Trampolines + 1) = 0x058B48;
-// 
-// 	// rel32
-// 	*(PULONG_PTR)*Ptr = AddressInSystem + Offset + 10 + Rel32;
-// 	Rel32 = (ULONG32)(*Ptr - (TrampolineInDriver + 8));
-// 	*(PULONG32)(Trampolines + 4) = Rel32;
-// 
-// 	// test qword ptr [rax],40h
-// 	*(PULONG_PTR)(Trampolines + 8) = 0x4000F748;
-// 	*(PULONG_PTR)(Trampolines + 12) = '\x00\x00\x00';
-// 	// pop rax
-// 	*(PUCHAR)(Trampolines + 15) = 0x58;
-// 	// ret
-// 	*(PUCHAR)(Trampolines + 16) = 0xC3;
-// 
-// 	// call
-// 	*(PUCHAR)MdlOffset = 0xE8;
-// 
-// 	DriverOffset = AddressInDriver + Offset;
-// 	Rel32 = (ULONG32)(TrampolineInDriver - (DriverOffset + 5));
-// 
-// 	RtlCopyMemory((PULONG_PTR)(MdlOffset + 1), &Rel32, 4);
-// 
-// 	// nop 5 bytes
-// 	memset((PULONG_PTR)(MdlOffset + 5), 0x90, 5);
-// 
-// 	Trampolines += 17;
-// 	TrampolineInDriver += 17;
-// 	*Ptr += 8;
-// }
+VOID FixOpcodeCmovaeRsiInDriver(
+	ULONG_PTR pMySysCall64,
+	ULONG64 Offset,
+	PULONG_PTR pAddress)
+{
+	ULONG_PTR p = pMySysCall64 + Offset;
+    LONG32 Rel32;
+    ULONG_PTR DriverOffset;
+
+    KdPrint(("found %p : cmovae rsi,qword ptr [nt!MmUserProbeAddress]\n", p));
+
+	// push rax
+	*Trampoline = 0x50;
+	//mov rax, qword ptr
+	*(PULONG_PTR)(Trampoline + 1) = 0x058B48;
+
+	// rel32
+	*pAddress = (ULONG_PTR)&MmUserProbeAddress;
+	Rel32 = (LONG32)((PUCHAR)pAddress - Trampoline - 8);
+	*(PLONG32)(Trampoline + 4) = Rel32;
+
+	// cmovae  rsi,qword ptr [rax]
+	*(PULONG_PTR)(Trampoline + 8) = 0x30430F48;
+	// pop rax
+	*(PUCHAR)(Trampoline + 12) = 0x58;
+	// ret
+	*(PUCHAR)(Trampoline + 13) = 0xC3;
+
+	// call
+	*(PUCHAR)p = 0xE8;
+	*(PLONG32)(p + 1) = (LONG32)(Trampoline - p - 5);
+
+	// nop 3 bytes
+	*(PUSHORT)(p + 5) = 0x9090;
+    *(PUCHAR) (p + 7) = 0x90;
+
+	Trampoline += 14;
+}
+ 
+VOID FixOpcodeTestInDriver(
+	ULONG_PTR pKiSystemCall64,
+	ULONG_PTR pMySysCall64,
+	ULONG64 Offset,
+	PULONG_PTR pAddress)
+{
+	ULONG_PTR p = pMySysCall64 + Offset;
+    LONG32 Rel32;
+
+    KdPrint(("found %p : test dword ptr [nt!PerfGlobalGroupMask],40h\n", p));
+
+	Rel32 = *(PULONG32)(p + 2);
+
+    // push rax
+    *Trampoline = 0x50;
+    // mov rax, qword ptr
+    *(PULONG_PTR)(Trampoline + 1) = 0x058B48;
+
+    // rel32
+    *pAddress = pKiSystemCall64 + Offset + 10 + Rel32;
+    Rel32 = (LONG32)((PUCHAR)pAddress - Trampoline - 8);
+    *(PLONG32)(Trampoline + 4) = Rel32;
+
+    // test qword ptr [rax],40h
+    *(PULONG_PTR)(Trampoline + 8) = 0x4000F7;
+    *(PULONG_PTR)(Trampoline + 11) = 0;
+    // pop rax
+    *(PUCHAR)(Trampoline + 14) = 0x58;
+    // ret
+    *(PUCHAR)(Trampoline + 15) = 0xC3;
+
+	// call
+	*(PUCHAR)p = 0xE8;
+	*(PLONG32)(p + 1) = (LONG32)(Trampoline - p - 5);
+
+	// nop 5 bytes
+	*(PULONG32)(p + 5) = 0x90909090;
+    *(PUCHAR)  (p + 9) = 0x90;
+
+    Trampoline += 16;
+}
 
 VOID FixOpcodeCallInDriver(
 	ULONG_PTR pKiSystemCall64,
@@ -186,6 +174,43 @@ VOID FixOpcodeCallInDriver(
 	}
 }
 
+VOID FixFF15CallInDriver(
+                           ULONG_PTR pKiSystemCall64,
+                           ULONG_PTR pMySysCall64,
+                           ULONG64 Offset,
+                           PULONG_PTR pAddress)
+{
+    ULONG_PTR p = pMySysCall64 + Offset;
+    LONG32 Rel32;
+    ULONG_PTR TargetAddress;
+
+    KdPrint(("found %p : FF15 call\n", p));
+
+    Rel32 = *(PLONG32)(p + 2);
+
+    TargetAddress = Rel32 + pKiSystemCall64 + Offset + 6;
+
+    if (MmIsAddressValid((PVOID)TargetAddress))
+    {
+        // target - opcode rel32
+        *pAddress = TargetAddress;
+
+        // jmp qword ptr
+        * Trampoline      = 0xFF;
+        *(Trampoline + 1) = 0x25;
+
+        Rel32 = (LONG32)((PUCHAR)pAddress - Trampoline - 6);
+        *(PLONG32)(Trampoline + 2) = Rel32;
+
+        *(PLONG32)(p + 2) = (LONG32)(Trampoline - p - 6);
+
+        Trampoline += 6;
+    }
+    else
+    {
+        KdPrint(("From %p FF15 Call - MmIsAddressValid() failed : %p\n", p, TargetAddress));
+    }
+}
 
 NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
 {
@@ -214,6 +239,7 @@ NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
         *(PLONG32)(SsdtTrampoline + 2) = Rel32;
 
         SsdtTable[i] = ((LONG)(SsdtTrampoline - (ULONG_PTR)SsdtTable)) << 4;
+        SsdtTable[i] |= SysSsdt->ServiceTable[i] & 0xF;
 
         SsdtTrampoline += 6;
 	}
@@ -243,7 +269,7 @@ PEPROCESS LookupAWin32Process()
 NTSTATUS
 RebuiltShadowSsdt(
     PSERVICE_DESCRIPTOR_TABLE SysSsdt,
-	PSERVICE_DESCRIPTOR_TABLE SysShadowSsdt)
+	PSERVICE_DESCRIPTOR_TABLE_SHADOW SysShadowSsdt)
 {
     PEPROCESS eprocess;
     KAPC_STATE ApcState;
@@ -286,6 +312,7 @@ RebuiltShadowSsdt(
 		*(PLONG32)(ShadowSsdtTrampoline + 2) = Rel32;
 
 		ShadowSsdtTable[i] = ((LONG)(ShadowSsdtTrampoline - (ULONG_PTR)ShadowSsdtTable)) << 4;
+        ShadowSsdtTable[i] |= SysShadowSsdt->ServiceTable[i] & 0xF;
 
 		ShadowSsdtTrampoline += 6;
 	}
@@ -330,7 +357,7 @@ NTSTATUS RebuildSystemServiceTable(
 	{
 		RebuiltShadowSsdt(
             (PSERVICE_DESCRIPTOR_TABLE)SysSsdt,
-            (PSERVICE_DESCRIPTOR_TABLE)SysShadowSsdt);
+            (PSERVICE_DESCRIPTOR_TABLE_SHADOW)SysShadowSsdt);
 
 		Rel32 = (LONG32)((ULONG_PTR)pMyShadowSsdt - (pMySysCall64 + leaR11Offset) - 7);
 		*(PLONG32)(pMySysCall64 + leaR11Offset + 3) = Rel32;
@@ -344,7 +371,7 @@ NTSTATUS RebuildSystemServiceTable(
 	Rel32 = *(PLONG32)(pMySysCall64 + leaRdiOffset + 3);
 	if (Rel32)
 	{
-		Rel32 = (LONG32)((ULONG_PTR)pMyShadowSsdt - (pMySysCall64 + leaRdiOffset) - 7);
+		Rel32 = (LONG32)((ULONG_PTR)pMyShadowSsdt+0x20 - (pMySysCall64 + leaRdiOffset) - 7);
 		*(PLONG32)(pMySysCall64 + leaRdiOffset + 3) = Rel32;
 	}
 	else
@@ -363,10 +390,6 @@ NTSTATUS FixMySyscall64(ULONG_PTR pMySysCall64, PUCHAR pKiSystemCall64, SIZE_T L
     ULONG64 leaR10Offset = 0, leaR11Offset = 0, leaRdiOffset = 0;
     ULONG64 i;
 
-    typedef VOID (*_handler)(ULONG_PTR, ULONG_PTR, ULONG_PTR, ULONG64, PULONG_PTR);
-
-    _handler Handler = NULL;
-
     for (i = 0; i < Length; i++)
     {
         // Fix opcode call
@@ -380,6 +403,23 @@ NTSTATUS FixMySyscall64(ULONG_PTR pMySysCall64, PUCHAR pKiSystemCall64, SIZE_T L
                 Address++);
         }
 
+        // Fix FF15 call  qword ptr [fffffa80`010320d0]
+        else if (pKiSystemCall64[i] == 0xFF &&
+            pKiSystemCall64[i + 1] == 0x15 )
+        {
+            ULONG_PTR p = pMySysCall64 + i;
+            LONG32 Rel32 = *(PLONG32)(p + 2);
+
+            *Address = Rel32 + (ULONG_PTR)pKiSystemCall64 + i + 6;
+            if ( MmIsAddressValid((PVOID)(*Address)) )
+            {
+                KdPrint(("found %p : 0xFF15 call\n", p));
+                *Address = *(PULONG_PTR)(*Address);
+                *(PLONG32)(p + 2) = (LONG32)((PUCHAR)Address - p - 6);
+                Address++;
+            }
+        }
+
         // Fix opcode cmp rsi, qword ptr [nt!MmUserProbeAddress]
         // Change it to a call xxxxxxxx
         else if (pKiSystemCall64[i] == 0x48 &&
@@ -391,25 +431,32 @@ NTSTATUS FixMySyscall64(ULONG_PTR pMySysCall64, PUCHAR pKiSystemCall64, SIZE_T L
                 i,
                 Address++);
         }
-// 
-//         // Fix opcode cmovae rsi,qword ptr [nt!MmUserProbeAddress]
-//         // Change it to call xxxxxxxx
-//         else if (syscall[i] == 0x48 &&
-//             syscall[i + 1] == 0x0f &&
-//             syscall[i + 2] == 0x43 &&
-//             syscall[i + 3] == 0x35)
-//         {
-//             Handler = FixOpcodeCmovaeRsiInDriver;
-//         }
-// 
-//         // Fix opcode test dword ptr [nt!PerfGlobalGroupMask],40h
-//         // Change it to a call xxxxxxxx
-//         else if (syscall[i] == 0xF7 &&
-//             syscall[i + 1] == 0x05 &&
-//             syscall[i + 6] == 0x40)
-//         {
-//             Handler = FixOpcodeTestInDriver;
-//         }
+
+        // Fix opcode cmovae rsi,qword ptr [nt!MmUserProbeAddress]
+        // Change it to call xxxxxxxx
+        else if (pKiSystemCall64[i] == 0x48 &&
+            pKiSystemCall64[i + 1] == 0x0f &&
+            pKiSystemCall64[i + 2] == 0x43 &&
+            pKiSystemCall64[i + 3] == 0x35)
+        {
+            FixOpcodeCmovaeRsiInDriver(
+                pMySysCall64,
+                i,
+                Address++);
+        }
+
+        // Fix opcode test dword ptr [nt!PerfGlobalGroupMask],40h
+        // Change it to a call xxxxxxxx
+        else if (pKiSystemCall64[i] == 0xF7 &&
+            pKiSystemCall64[i + 1] == 0x05 &&
+            pKiSystemCall64[i + 6] == 0x40)
+        {
+            FixOpcodeTestInDriver(
+                (ULONG_PTR)pKiSystemCall64,
+                pMySysCall64,
+                i,
+                Address++);
+        }
 
         // Fix lea r10,[nt!KeServiceDescriptorTable]
         // and lea r11,[nt!KeServiceDescriptorTableShadow]
@@ -432,33 +479,19 @@ NTSTATUS FixMySyscall64(ULONG_PTR pMySysCall64, PUCHAR pKiSystemCall64, SIZE_T L
         }
 
         // Find call r10
-//         else if (syscall[i] == 0x41 &&
-//             syscall[i + 1] == 0xff &&
-//             syscall[i + 2] == 0xd2 &&
-//             syscall[i + 3] == 0x65 &&
-//             syscall[i + 4] == 0xff)
+//         else if (pKiSystemCall64[i] == 0x41 &&
+//             pKiSystemCall64[i + 1] == 0xff &&
+//             pKiSystemCall64[i + 2] == 0xd2 &&
+//             pKiSystemCall64[i + 3] == 0x65 &&
+//             pKiSystemCall64[i + 4] == 0xff)
 //         {
 //             DbgPrint("Call r10 found!\n");
-//             CallR10InDriver = (ULONG_PTR)_syscall64 + i;
-//             CallR10InMdl = pMySysCall64 + i;
-//             CallR10InSystem = pKiSystemCall64 + i;
-//             CallR10 = &CallR10InSystem;
-//         }
-
-//         if (Handler)
-//         {
-//             Handler((ULONG_PTR)_syscall64,
-//                 pKiSystemCall64,
-//                 (ULONG_PTR)pMySysCall64,
-//                 i,
-//                 pAddress);
-//             Handler = NULL;
 //         }
     }
 
     if (!leaR10Offset || !leaR11Offset || !leaRdiOffset)
     {
-        DbgPrint("Failed to initialize ssdt table!\n");
+        KdPrint(("Failed to initialize ssdt table!\n"));
         return STATUS_NOT_FOUND;
     }
     else
@@ -474,7 +507,7 @@ NTSTATUS FixMySyscall64(ULONG_PTR pMySysCall64, PUCHAR pKiSystemCall64, SIZE_T L
     return STATUS_SUCCESS;
 }
 
-NTSTATUS InitMySyscall64()
+ULONG_PTR InitMySyscall64()
 {
     PUCHAR pKiSystemCall64 = (PUCHAR)__readmsr(0xC0000082);
     SIZE_T syscall64length = 0;
@@ -482,7 +515,7 @@ NTSTATUS InitMySyscall64()
     ULONG i;
 
     if (!pKiSystemCall64)
-        return STATUS_NOT_FOUND;
+        return 0;
 
     // 0x1000 may be enough?
     for (i = 0; i < 0x1000; i++)
@@ -501,25 +534,22 @@ NTSTATUS InitMySyscall64()
     }
 
     if (!syscall64length)
-        return STATUS_NOT_FOUND;
+        return 0;
 
     p = (ULONG_PTR)ExAllocatePoolWithTag(NonPagedPool, 0x13000, 'DeDf');
     if (!p)
-        return STATUS_INSUFFICIENT_RESOURCES;
+        return 0;
     RtlZeroMemory((PVOID)p, 0x13000);
-    
 
+    RtlCopyMemory((PVOID)p, pKiSystemCall64, syscall64length);
     KdPrint(("p : %p, KiSystemCall64 length = %x\n", (PULONG_PTR)p, syscall64length));
-    __debugbreak();
 
     pMySsdt       = (PSERVICE_DESCRIPTOR_TABLE)
         (p + 0x1000 - sizeof(SERVICE_DESCRIPTOR_TABLE) - sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW));
     pMyShadowSsdt = (PSERVICE_DESCRIPTOR_TABLE_SHADOW)
         (p + 0x1000 - sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW));
 
-    RtlCopyMemory((PVOID)p, pKiSystemCall64, syscall64length);
-    //
-    Trampoline          = (PUCHAR)  (p + 0x1000);
+    Trampoline           = (PUCHAR)  (p + 0x1000);
     Address              = (PULONG_PTR)(p + 0x2000);
     //
     SsdtTable            = (PLONG32) (p + 0x3000);
@@ -530,24 +560,40 @@ NTSTATUS InitMySyscall64()
     ShadowSsdtTrampoline =            p + 0x7500;
     ShadowSsdtAddress    = (PULONG64)(p + 0x9500);
 
+    __debugbreak();
+
     // fix rel addr in our syscall.
     if ( FixMySyscall64(p, pKiSystemCall64, syscall64length) )
+    {
         ExFreePool((PVOID)p);
+        return 0;
+    }
     else
-        ExFreePool((PVOID)p);
-    return STATUS_SUCCESS;
+    {
+        //ExFreePool((PVOID)p);
+        return p;
+    }
 }
 
 VOID DriverUnload(PDRIVER_OBJECT DriverObject)
 {
+    __writemsr(0xC0000082, g_KiSystemCall64);
+    ExFreePool((PVOID)g_MyKiSysCall64);
 }
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
 	DriverObject->DriverUnload = DriverUnload;
 
-	InitMySyscall64();
+	g_MyKiSysCall64 = InitMySyscall64();
 
-	return STATUS_UNSUCCESSFUL;
+    if (g_MyKiSysCall64)
+    {
+        g_KiSystemCall64 = __readmsr(0xC0000082);
+        __writemsr(0xC0000082, g_MyKiSysCall64);
+        return STATUS_SUCCESS;
+    }
+    else
+	    return STATUS_UNSUCCESSFUL;
 }
 
