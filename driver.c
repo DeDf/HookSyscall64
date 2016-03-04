@@ -174,44 +174,6 @@ VOID FixOpcodeCallInDriver(
 	}
 }
 
-VOID FixFF15CallInDriver(
-                           ULONG_PTR pKiSystemCall64,
-                           ULONG_PTR pMySysCall64,
-                           ULONG64 Offset,
-                           PULONG_PTR pAddress)
-{
-    ULONG_PTR p = pMySysCall64 + Offset;
-    LONG32 Rel32;
-    ULONG_PTR TargetAddress;
-
-    KdPrint(("found %p : FF15 call\n", p));
-
-    Rel32 = *(PLONG32)(p + 2);
-
-    TargetAddress = Rel32 + pKiSystemCall64 + Offset + 6;
-
-    if (MmIsAddressValid((PVOID)TargetAddress))
-    {
-        // target - opcode rel32
-        *pAddress = TargetAddress;
-
-        // jmp qword ptr
-        * Trampoline      = 0xFF;
-        *(Trampoline + 1) = 0x25;
-
-        Rel32 = (LONG32)((PUCHAR)pAddress - Trampoline - 6);
-        *(PLONG32)(Trampoline + 2) = Rel32;
-
-        *(PLONG32)(p + 2) = (LONG32)(Trampoline - p - 6);
-
-        Trampoline += 6;
-    }
-    else
-    {
-        KdPrint(("From %p FF15 Call - MmIsAddressValid() failed : %p\n", p, TargetAddress));
-    }
-}
-
 NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
 {
     LONG32 Rel32;
@@ -225,6 +187,8 @@ NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
 	pMySsdt->ArgumentTable = SysSsdt->ArgumentTable;
 	pMySsdt->CounterTable  = SysSsdt->CounterTable;
 	pMySsdt->TableSize     = SysSsdt->TableSize;
+
+    //KdPrint(("\n===============SSDT===============\n"));
 
 	// Fill ssdt rel32
 	for (i = 0; i < SysSsdt->TableSize; i++)
@@ -242,6 +206,7 @@ NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
         SsdtTable[i] |= SysSsdt->ServiceTable[i] & 0xF;
 
         SsdtTrampoline += 6;
+        //KdPrint(("%d 0x%llX\n", i, SsdtAddress[i]));
 	}
 
 	return STATUS_SUCCESS;
@@ -299,6 +264,8 @@ RebuiltShadowSsdt(
 	pMyShadowSsdt->CounterTable  = SysShadowSsdt->CounterTable;
 	pMyShadowSsdt->TableSize     = SysShadowSsdt->TableSize;
 
+    //KdPrint(("\n===============ShadowSSDT===============\n"));
+
 	// Fill shadow ssdt rel32
 	for (i = 0; i < SysShadowSsdt->TableSize; i++)
 	{
@@ -315,6 +282,7 @@ RebuiltShadowSsdt(
         ShadowSsdtTable[i] |= SysShadowSsdt->ServiceTable[i] & 0xF;
 
 		ShadowSsdtTrampoline += 6;
+        //KdPrint(("%d 0x%llX\n", i, ShadowSsdtAddress[i]));
 	}
 
 	KeUnstackDetachProcess(&ApcState);
@@ -560,7 +528,7 @@ ULONG_PTR InitMySyscall64()
     ShadowSsdtTrampoline =            p + 0x7500;
     ShadowSsdtAddress    = (PULONG64)(p + 0x9500);
 
-    __debugbreak();
+    //__debugbreak();
 
     // fix rel addr in our syscall.
     if ( FixMySyscall64(p, pKiSystemCall64, syscall64length) )
