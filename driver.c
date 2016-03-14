@@ -117,7 +117,7 @@ VOID FixOpcodeTestInDriver(
     Rel32 = (LONG32)((PUCHAR)pAddress - Trampoline - 8);
     *(PLONG32)(Trampoline + 4) = Rel32;
 
-    // test qword ptr [rax],40h
+    // test dword ptr [rax],40h
     *(PULONG_PTR)(Trampoline + 8) = 0x4000F7;
     *(PULONG_PTR)(Trampoline + 11) = 0;
     // pop rax
