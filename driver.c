@@ -182,8 +182,11 @@ NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
 	if (!SysSsdt)
 		return STATUS_NOT_FOUND;
 
+    memset(pMySsdt, 0 ,sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW));
+
 	// Fill SSDT in driver
-	pMySsdt->ServiceTable  = SsdtTable;
+	//pMySsdt->ServiceTable  = SsdtTable;
+    pMySsdt->ServiceTable  = SysSsdt->ServiceTable;
 	pMySsdt->ArgumentTable = SysSsdt->ArgumentTable;
 	pMySsdt->CounterTable  = SysSsdt->CounterTable;
 	pMySsdt->TableSize     = SysSsdt->TableSize;
@@ -191,23 +194,23 @@ NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
     //KdPrint(("\n===============SSDT===============\n"));
 
 	// Fill ssdt rel32
-	for (i = 0; i < SysSsdt->TableSize; i++)
-	{
-		SsdtAddress[i] = ((LONG)SysSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysSsdt->ServiceTable;
-
-        // jmp qword ptr
-        *(PUSHORT)SsdtTrampoline = 0x25FF;
-
-        // rel32
-        Rel32 = (LONG32)((ULONG_PTR)&SsdtAddress[i] - SsdtTrampoline - 6);
-        *(PLONG32)(SsdtTrampoline + 2) = Rel32;
-
-        SsdtTable[i] = ((LONG)(SsdtTrampoline - (ULONG_PTR)SsdtTable)) << 4;
-        SsdtTable[i] |= SysSsdt->ServiceTable[i] & 0xF;
-
-        SsdtTrampoline += 6;
-        //KdPrint(("%d 0x%llX\n", i, SsdtAddress[i]));
-	}
+// 	for (i = 0; i < SysSsdt->TableSize; i++)
+// 	{
+// 		SsdtAddress[i] = ((LONG)SysSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysSsdt->ServiceTable;
+// 
+//         // jmp qword ptr
+//         *(PUSHORT)SsdtTrampoline = 0x25FF;
+// 
+//         // rel32
+//         Rel32 = (LONG32)((ULONG_PTR)&SsdtAddress[i] - SsdtTrampoline - 6);
+//         *(PLONG32)(SsdtTrampoline + 2) = Rel32;
+// 
+//         SsdtTable[i] = ((LONG)(SsdtTrampoline - (ULONG_PTR)SsdtTable)) << 4;
+//         SsdtTable[i] |= SysSsdt->ServiceTable[i] & 0xF;
+// 
+//         SsdtTrampoline += 6;
+//         //KdPrint(("%d 0x%llX\n", i, SsdtAddress[i]));
+// 	}
 
 	return STATUS_SUCCESS;
 }
@@ -233,7 +236,6 @@ PEPROCESS LookupAWin32Process()
 
 NTSTATUS
 RebuiltShadowSsdt(
-    PSERVICE_DESCRIPTOR_TABLE SysSsdt,
 	PSERVICE_DESCRIPTOR_TABLE_SHADOW SysShadowSsdt)
 {
     PEPROCESS eprocess;
@@ -242,7 +244,7 @@ RebuiltShadowSsdt(
     LONG32 Rel32;
     ULONG32 i;
 
-	if (!SysSsdt || !SysShadowSsdt)
+	if (!SysShadowSsdt)
 		return STATUS_NOT_FOUND;
 
 	eprocess = LookupAWin32Process();
@@ -252,38 +254,38 @@ RebuiltShadowSsdt(
 	}
 	KeStackAttachProcess(eprocess, &ApcState);  // Attach to a GUI process to obtain shadow ssdt address
 
-	// SSDT in Shadow SSDT
-	pMyShadowSsdt->SsdtServiceTable  = SsdtTable;
-	pMyShadowSsdt->SsdtArgumentTable = SysSsdt->ArgumentTable;
-	pMyShadowSsdt->SsdtCounterTable  = SysSsdt->CounterTable;
-	pMyShadowSsdt->SsdtTableSize     = SysSsdt->TableSize;
-
-	// Shadow SSDT
-	pMyShadowSsdt->ServiceTable  = ShadowSsdtTable;
-	pMyShadowSsdt->ArgumentTable = SysShadowSsdt->ArgumentTable;
-	pMyShadowSsdt->CounterTable  = SysShadowSsdt->CounterTable;
-	pMyShadowSsdt->TableSize     = SysShadowSsdt->TableSize;
+	//pMyShadowSsdt->SsdtServiceTable  = SsdtTable;
+    pMyShadowSsdt->SsdtServiceTable  = SysShadowSsdt->SsdtServiceTable;
+	pMyShadowSsdt->SsdtArgumentTable = SysShadowSsdt->SsdtArgumentTable;
+	pMyShadowSsdt->SsdtCounterTable  = SysShadowSsdt->SsdtCounterTable;
+	pMyShadowSsdt->SsdtTableSize     = SysShadowSsdt->SsdtTableSize;
+    //
+	//pMyShadowSsdt->ServiceTable  = ShadowSsdtTable;
+    pMyShadowSsdt->ServiceTable      = SysShadowSsdt->ServiceTable;
+	pMyShadowSsdt->ArgumentTable     = SysShadowSsdt->ArgumentTable;
+	pMyShadowSsdt->CounterTable      = SysShadowSsdt->CounterTable;
+	pMyShadowSsdt->TableSize         = SysShadowSsdt->TableSize;
 
     //KdPrint(("\n===============ShadowSSDT===============\n"));
 
 	// Fill shadow ssdt rel32
-	for (i = 0; i < SysShadowSsdt->TableSize; i++)
-	{
-        ShadowSsdtAddress[i] = ((LONG)SysShadowSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysShadowSsdt->ServiceTable;
-
-		// jmp qword ptr
-		*(PUSHORT)ShadowSsdtTrampoline = 0x25FF;
-
-		// rel32
-		Rel32 = (LONG32)((ULONG_PTR)&ShadowSsdtAddress[i] - ShadowSsdtTrampoline - 6);
-		*(PLONG32)(ShadowSsdtTrampoline + 2) = Rel32;
-
-		ShadowSsdtTable[i] = ((LONG)(ShadowSsdtTrampoline - (ULONG_PTR)ShadowSsdtTable)) << 4;
-        ShadowSsdtTable[i] |= SysShadowSsdt->ServiceTable[i] & 0xF;
-
-		ShadowSsdtTrampoline += 6;
-        //KdPrint(("%d 0x%llX\n", i, ShadowSsdtAddress[i]));
-	}
+// 	for (i = 0; i < SysShadowSsdt->TableSize; i++)
+// 	{
+//         ShadowSsdtAddress[i] = ((LONG)SysShadowSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysShadowSsdt->ServiceTable;
+// 
+// 		// jmp qword ptr
+// 		*(PUSHORT)ShadowSsdtTrampoline = 0x25FF;
+// 
+// 		// rel32
+// 		Rel32 = (LONG32)((ULONG_PTR)&ShadowSsdtAddress[i] - ShadowSsdtTrampoline - 6);
+// 		*(PLONG32)(ShadowSsdtTrampoline + 2) = Rel32;
+// 
+// 		ShadowSsdtTable[i] = ((LONG)(ShadowSsdtTrampoline - (ULONG_PTR)ShadowSsdtTable)) << 4;
+//         ShadowSsdtTable[i] |= SysShadowSsdt->ServiceTable[i] & 0xF;
+// 
+// 		ShadowSsdtTrampoline += 6;
+//         //KdPrint(("%d 0x%llX\n", i, ShadowSsdtAddress[i]));
+// 	}
 
 	KeUnstackDetachProcess(&ApcState);
 
@@ -323,9 +325,7 @@ NTSTATUS RebuildSystemServiceTable(
 	SysShadowSsdt = pKiSystemCall64 + leaR11Offset + 7 + Rel32;
 	if (Rel32)
 	{
-		RebuiltShadowSsdt(
-            (PSERVICE_DESCRIPTOR_TABLE)SysSsdt,
-            (PSERVICE_DESCRIPTOR_TABLE_SHADOW)SysShadowSsdt);
+		RebuiltShadowSsdt((PSERVICE_DESCRIPTOR_TABLE_SHADOW)SysShadowSsdt);
 
 		Rel32 = (LONG32)((ULONG_PTR)pMyShadowSsdt - (pMySysCall64 + leaR11Offset) - 7);
 		*(PLONG32)(pMySysCall64 + leaR11Offset + 3) = Rel32;
@@ -433,9 +433,21 @@ NTSTATUS FixMySyscall64(ULONG_PTR pMySysCall64, PUCHAR pKiSystemCall64, SIZE_T L
             pKiSystemCall64[i + 7] == 0x4c &&
             pKiSystemCall64[i + 8] == 0x8d)
         {
+            UCHAR *p = (UCHAR *)(pMySysCall64 + i + 14);
+
             // Save their rel32
             leaR10Offset = i;
             leaR11Offset = i + 7;
+
+            //=======================
+            *Address = (ULONG_PTR)(&pKiSystemCall64[i] + 14);
+            
+            // jmp qword ptr
+            * p      = 0xFF;
+            *(p + 1) = 0x25;
+            *(PLONG32)(p + 2) = (LONG32)((PUCHAR)Address - p - 6);
+
+            Address++;
         }
 
         // Fix lea rdi,[nt!KeServiceDescriptorTableShadow]
@@ -445,16 +457,6 @@ NTSTATUS FixMySyscall64(ULONG_PTR pMySysCall64, PUCHAR pKiSystemCall64, SIZE_T L
         {
             leaRdiOffset = i;
         }
-
-        // Find call r10
-//         else if (pKiSystemCall64[i] == 0x41 &&
-//             pKiSystemCall64[i + 1] == 0xff &&
-//             pKiSystemCall64[i + 2] == 0xd2 &&
-//             pKiSystemCall64[i + 3] == 0x65 &&
-//             pKiSystemCall64[i + 4] == 0xff)
-//         {
-//             DbgPrint("Call r10 found!\n");
-//         }
     }
 
     if (!leaR10Offset || !leaR11Offset || !leaRdiOffset)
@@ -510,12 +512,15 @@ ULONG_PTR InitMySyscall64()
     RtlZeroMemory((PVOID)p, 0x13000);
 
     RtlCopyMemory((PVOID)p, pKiSystemCall64, syscall64length);
-    KdPrint(("p : %p, KiSystemCall64 length = %x\n", (PULONG_PTR)p, syscall64length));
+    KdPrint(("p : %p, %p, KiSystemCall64 length = %x\n",
+        (PULONG_PTR)p,
+        pKiSystemCall64,
+        syscall64length));
 
-    pMySsdt       = (PSERVICE_DESCRIPTOR_TABLE)
-        (p + 0x1000 - sizeof(SERVICE_DESCRIPTOR_TABLE) - sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW));
-    pMyShadowSsdt = (PSERVICE_DESCRIPTOR_TABLE_SHADOW)
-        (p + 0x1000 - sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW));
+    pMySsdt       = (PSERVICE_DESCRIPTOR_TABLE)        (p + 0x1000 - \
+        sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW) * 2);
+    pMyShadowSsdt = (PSERVICE_DESCRIPTOR_TABLE_SHADOW) (p + 0x1000 - \
+        sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW));
 
     Trampoline           = (PUCHAR)  (p + 0x1000);
     Address              = (PULONG_PTR)(p + 0x2000);
@@ -536,11 +541,8 @@ ULONG_PTR InitMySyscall64()
         ExFreePool((PVOID)p);
         return 0;
     }
-    else
-    {
-        //ExFreePool((PVOID)p);
-        return p;
-    }
+
+    return p;
 }
 
 VOID DriverUnload(PDRIVER_OBJECT DriverObject)
