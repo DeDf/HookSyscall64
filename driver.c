@@ -547,20 +547,38 @@ ULONG_PTR InitMySyscall64()
 
 VOID DriverUnload(PDRIVER_OBJECT DriverObject)
 {
-    __writemsr(0xC0000082, g_KiSystemCall64);
+    int i;
+
+    // 遍历所有处理器
+    for (i = 0; i < KeNumberProcessors; i++)
+    {
+        KeSetSystemAffinityThread ((KAFFINITY) ((ULONG_PTR)1 << i));  // 将代码运行在指定CPU
+        __writemsr(0xC0000082, g_KiSystemCall64);
+        KeRevertToUserAffinityThread ();
+    }
+
     ExFreePool((PVOID)g_MyKiSysCall64);
 }
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
+    int i;
+
 	DriverObject->DriverUnload = DriverUnload;
 
 	g_MyKiSysCall64 = InitMySyscall64();
-
     if (g_MyKiSysCall64)
     {
         g_KiSystemCall64 = __readmsr(0xC0000082);
-        __writemsr(0xC0000082, g_MyKiSysCall64);
+
+        // 遍历所有处理器
+        for (i = 0; i < KeNumberProcessors; i++)
+        {
+            KeSetSystemAffinityThread ((KAFFINITY) ((ULONG_PTR)1 << i));  // 将代码运行在指定CPU
+            __writemsr(0xC0000082, g_MyKiSysCall64);
+            KeRevertToUserAffinityThread ();
+        }
+
         return STATUS_SUCCESS;
     }
     else
