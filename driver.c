@@ -196,7 +196,10 @@ NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
 	// Fill ssdt rel32
 // 	for (i = 0; i < SysSsdt->TableSize; i++)
 // 	{
-// 		SsdtAddress[i] = ((LONG)SysSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysSsdt->ServiceTable;
+//         if (g_vOSVer <= OS_2003)
+//             SsdtAddress[i] = ((LONG)SysSsdt->ServiceTable[i] & 0xFFFFFFF0) + (ULONG_PTR)SysSsdt->ServiceTable;
+//         else
+// 		    SsdtAddress[i] = ((LONG)SysSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysSsdt->ServiceTable;
 // 
 //         // jmp qword ptr
 //         *(PUSHORT)SsdtTrampoline = 0x25FF;
@@ -271,7 +274,10 @@ RebuiltShadowSsdt(
 	// Fill shadow ssdt rel32
 // 	for (i = 0; i < SysShadowSsdt->TableSize; i++)
 // 	{
-//         ShadowSsdtAddress[i] = ((LONG)SysShadowSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysShadowSsdt->ServiceTable;
+//         if (g_vOSVer <= OS_2003)
+//             ShadowSsdtAddress[i] = ((LONG)SysShadowSsdt->ServiceTable[i] & 0xFFFFFFF0) + (ULONG_PTR)SysShadowSsdt->ServiceTable;
+//         else
+//             ShadowSsdtAddress[i] = ((LONG)SysShadowSsdt->ServiceTable[i] >> 4) + (ULONG_PTR)SysShadowSsdt->ServiceTable;
 // 
 // 		// jmp qword ptr
 // 		*(PUSHORT)ShadowSsdtTrampoline = 0x25FF;
@@ -504,7 +510,7 @@ ULONG_PTR InitMySyscall64()
     }
 
     if (!syscall64length)
-        return 0;
+        syscall64length = 0x1000 - sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW) * 2;
 
     p = (ULONG_PTR)ExAllocatePoolWithTag(NonPagedPool, 0x13000, 'DeDf');
     if (!p)
