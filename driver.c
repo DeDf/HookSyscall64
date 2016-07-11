@@ -208,10 +208,14 @@ NTSTATUS RebuiltSsdt(PSERVICE_DESCRIPTOR_TABLE SysSsdt)
 //         Rel32 = (LONG32)((ULONG_PTR)&SsdtAddress[i] - SsdtTrampoline - 6);
 //         *(PLONG32)(SsdtTrampoline + 2) = Rel32;
 // 
-//         SsdtTable[i] = ((LONG)(SsdtTrampoline - (ULONG_PTR)SsdtTable)) << 4;
+//         if (g_vOSVer <= OS_2003)
+//             SsdtTable[i] = ((LONG)(SsdtTrampoline - (ULONG_PTR)SsdtTable));
+//         else
+//             SsdtTable[i] = ((LONG)(SsdtTrampoline - (ULONG_PTR)SsdtTable)) << 4;
+// 
 //         SsdtTable[i] |= SysSsdt->ServiceTable[i] & 0xF;
 // 
-//         SsdtTrampoline += 6;
+//         SsdtTrampoline += 0x10;
 //         //KdPrint(("%d 0x%llX\n", i, SsdtAddress[i]));
 // 	}
 
@@ -286,10 +290,14 @@ RebuiltShadowSsdt(
 // 		Rel32 = (LONG32)((ULONG_PTR)&ShadowSsdtAddress[i] - ShadowSsdtTrampoline - 6);
 // 		*(PLONG32)(ShadowSsdtTrampoline + 2) = Rel32;
 // 
-// 		ShadowSsdtTable[i] = ((LONG)(ShadowSsdtTrampoline - (ULONG_PTR)ShadowSsdtTable)) << 4;
+//         if (g_vOSVer <= OS_2003)
+//             ShadowSsdtTable[i] = ((LONG)(ShadowSsdtTrampoline - (ULONG_PTR)ShadowSsdtTable));
+//         else
+//             ShadowSsdtTable[i] = ((LONG)(ShadowSsdtTrampoline - (ULONG_PTR)ShadowSsdtTable)) << 4;
+// 
 //         ShadowSsdtTable[i] |= SysShadowSsdt->ServiceTable[i] & 0xF;
 // 
-// 		ShadowSsdtTrampoline += 6;
+// 		ShadowSsdtTrampoline += 0x10;
 //         //KdPrint(("%d 0x%llX\n", i, ShadowSsdtAddress[i]));
 // 	}
 
@@ -512,10 +520,10 @@ ULONG_PTR InitMySyscall64()
     if (!syscall64length)
         syscall64length = 0x1000 - sizeof(SERVICE_DESCRIPTOR_TABLE_SHADOW) * 2;
 
-    p = (ULONG_PTR)ExAllocatePoolWithTag(NonPagedPool, 0x13000, 'DeDf');
+    p = (ULONG_PTR)ExAllocatePoolWithTag(NonPagedPool, 0x15000, 'DeDf');
     if (!p)
         return 0;
-    RtlZeroMemory((PVOID)p, 0x13000);
+    RtlZeroMemory((PVOID)p, 0x15000);
 
     RtlCopyMemory((PVOID)p, pKiSystemCall64, syscall64length);
     KdPrint(("p : %p, %p, KiSystemCall64 length = %x\n",
@@ -533,11 +541,11 @@ ULONG_PTR InitMySyscall64()
     //
     SsdtTable            = (PLONG32) (p + 0x3000);
     SsdtTrampoline       =            p + 0x4000;
-    SsdtAddress          = (PULONG64)(p + 0x5000);
+    SsdtAddress          = (PULONG64)(p + 0x6000);
     //
-    ShadowSsdtTable      = (PLONG32) (p + 0x6000);
-    ShadowSsdtTrampoline =            p + 0x7500;
-    ShadowSsdtAddress    = (PULONG64)(p + 0x9500);
+    ShadowSsdtTable      = (PLONG32) (p + 0x7000);
+    ShadowSsdtTrampoline =            p + 0x8500;
+    ShadowSsdtAddress    = (PULONG64)(p + 0x11000);
 
     //__debugbreak();
 
